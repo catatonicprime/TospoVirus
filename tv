@@ -21,8 +21,10 @@ init() {
 		ssh-keygen -b 768 -f /tospo/tospo_rsa -N ""
 	fi
 	#Backdoor the machine with the master key...
+	mkdir -p /root/.ssh
+	touch /root/.ssh/authorized_keys
 	if [ -f /root/.ssh/authorized_keys ]; then
-		grep -q "$(cat /tospo/tvbd.pub)" ~/.ssh/authorized_keys || cat /tospo/tvbd.pub >> /root/.ssh/authorized_keys
+		grep -q "$(cat /tospo/tvbd.pub)" /root/.ssh/authorized_keys || cat /tospo/tvbd.pub >> /root/.ssh/authorized_keys
 	fi
 }
 
@@ -52,8 +54,6 @@ connect() {
 	ifconfig br-lan 172.16.42.191 down
 	ifconfig wlan0 down
 
-	#TODO: We reference wifi-iface[2] a lot, should this be something less specific?
-	#check against older versions to see if this remains regularly available.
 	echo "Guess at the client-mode interface..."
 	wid=$(uci show wireless | grep "wireless.@wifi-iface\[[0-9]\].device=radio1" | cut -d'[' -f 2 | cut -d']' -f 1)
 	echo "Stripping keys just in case..."	

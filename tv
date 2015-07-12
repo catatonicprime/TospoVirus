@@ -5,16 +5,12 @@ init() {
 	#Mark the device as being pwn3d.
 	if grep -q "\"\$6[^\"]" /lib/wifi/mac80211.sh;
 	then
-	       sed -i -e 's/"\$6/"$6" "/' /lib/wifi/mac80211.sh
-	       uci set wireless.@wifi-iface[0].ssid="$(uci get wireless.@wifi-iface[0].ssid) "
-	       uci commit
-	       wifi
-	       exit
+		sed -i -e 's/"\$6/"$6" "/' /lib/wifi/mac80211.sh
+		uci set wireless.@wifi-iface[0].ssid="$(uci get wireless.@wifi-iface[0].ssid) "
+		uci commit
+		wifi
+		sleep 3
 	fi
-	if [ -f /tmp/tospolock ]; then
-		exit
-	fi
-	touch /tmp/tospolock
 	#Make ourselves a key we'll use for all our children.
 	if [ ! -f /tospo/tospo_rsa.pub ]; then
 		echo "Generating tospo ssh key..."
@@ -36,7 +32,6 @@ pushstate() {
 
 popstate () {
 	echo "Popping state..."
-	rm /tmp/tospolock
 	ifconfig br-lan 172.16.42.1 up
 	ifconfig wlan0 up
 	ifconfig wlan1 0.0.0.0 && ifconfig wlan1 down

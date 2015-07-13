@@ -70,7 +70,7 @@ connect() {
 
 post() {
 	len=`printf "$2" | wc -c`
-	printf "POST $1 HTTP/1.1\nHost: 172.16.42.1:1471\nContent-Type: application/x-www-form-urlencoded\nCookie: PHPSESSID=$3\nContent-Length: $len\nConnection: close\n\n$2" | nc 172.16.42.1 1471
+	printf "POST $1 HTTP/1.1\r\nHost: 172.16.42.1:1471\r\nContent-Type: application/x-www-form-urlencoded\r\nCookie: PHPSESSID=$3\r\nContent-Length: $len\r\nConnection: close\r\n\r\n$2" | nc 172.16.42.1 1471
 }
 
 login() {

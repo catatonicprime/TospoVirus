@@ -1,0 +1,3 @@
+To simply shorten the script use this following type of line:
+perl bashobfus/bash_obfus.pl -i tv -o tvo -C -F
+

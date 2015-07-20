@@ -1,6 +1,7 @@
 #!/bin/bash
 
 #Create a short semi-obfuscated version from the long version
+#Additionally strip all diagnostic echos and the like.
 perl tools/bashobfus/bash_obfus.pl -i tv -o dist/tv.tmp -C -F
 cat dist/tv.tmp | grep -v "^echo" > dist/tv
 chmod ug+rx dist/tv

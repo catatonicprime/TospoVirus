@@ -10,7 +10,10 @@ _Note: You'll need to have a configured device OR use the metasploit-module to e
 
 Decrypting ex-filtrated data:
 ------
+wireshark filter is:  
+(wlan.fc.type_subtype == 0x04) && (wlan_mgt.tag.length == 32)  
 printf $(echo "[data copied from wireshark]" | sed -re 's/(..)/\\x\1/g') | openssl rsautl -decrypt -inkey tvd.pem
+
 
 Files & Purpose:
 ------

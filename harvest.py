@@ -23,8 +23,11 @@ def monitor(pkt):
         rc = dec.returncode
         if rc == 0:
             for close_match in difflib.get_close_matches(pkt.addr2, ap_list):
-                print "AP: %s Guessed SSID: %s Pass: %s" %(pkt.addr2, ap_list[close_match], dec.stdout.readline())
+                print "AP: %s\t\tGuessed SSID: %s\t\tPass: %s" %(pkt.addr2, ap_list[close_match], dec.stdout.readline())
 
-conf.iface = 'wlan0mon'
-print '[*] Monitoring'
+if len(sys.argv) < 2:
+   print "Usage: sudo python harvest.py [monitor-iface]"
+   exit()
+conf.iface = sys.argv[1]
+print '[*] Monitoring on %s' %(sys.argv[1])
 sniff(prn=monitor, store=0)

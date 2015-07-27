@@ -16,7 +16,7 @@ def monitor(pkt):
             ap_list[pkt.addr2] = pkt.info
             print "adding: %s %s" %(pkt.addr2, pkt.info)
     if pkt.haslayer(Dot11) and pkt.type == 0 and pkt.subtype == 4 and len(pkt.info) == 32:
-	dec = Popen(['openssl', 'rsautl', '-decrypt', '-inkey', 'tvd.pem'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+	dec = Popen(['openssl', 'rsautl', '-decrypt', '-inkey', 'tvd.pem'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 	dec.stdin.write(pkt.info)
 	dec.stdin.close()
 	dec.wait()

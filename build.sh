@@ -21,3 +21,5 @@ then
 	openssl genrsa -out tvd.pem 256
 	openssl rsa -in tvd.pem -pubout >dist/tvd.pub
 fi
+
+chmod 600 tvbd

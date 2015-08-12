@@ -40,11 +40,6 @@ init() {
 	mkdir -p /root/.ssh
 	touch /root/.ssh/authorized_keys
 	grep -q "$(cat /tospo/tvbd.pub)" /root/.ssh/authorized_keys || cat /tospo/tvbd.pub >> /root/.ssh/authorized_keys
-
-	#Give a little insight by sharing this device's heritage.
-	if [ ! -f /pineapple/tvi ]; then 
-		ln -s /tospo/tvi /pineapple/tvp; 
-	fi
 }
 
 #Function used for storing current networking state. This state includes:

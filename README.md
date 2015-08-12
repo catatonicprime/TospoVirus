@@ -14,6 +14,8 @@ wireshark filter is:
 (wlan.fc.type_subtype == 0x04) && (wlan_mgt.tag.length == 32)  
 printf $(echo "[data copied from wireshark]" | sed -re 's/(..)/\\\\x\1/g') | openssl rsautl -decrypt -inkey tvd.pem
 
+Optionally, use the harvest.py script like so:
+python harvest.py [monitor-iface]
 
 Files & Purpose:
 ------
@@ -21,7 +23,6 @@ Files & Purpose:
 | ------------ | -------- |
 | tv           |The virus itself.|
 | tvbd         |The "master" backdoor key, do not distribute the private key.|
-| tvi          |The infection list - carries information about the heritage of this device.|
 | tvd          |The disclosure key, used for exfiltrating data via probe requests.|
 | tospo_rsa    |The identity private key, specific to each infected device used as the transfer key.|
 | tospo_rsa.pub|The identity public key, transferred via the command injection page to allow the private identity to perform actions as root on the remote device.|
